@@ -1,33 +1,54 @@
-const express = require("express");
+const express = require('express');
+const mongoose = require('mongoose');
+const bodyParser = require('body-parser');
+
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
-// Initialize an empty array to store players' data
-let players = [];
+// MongoDB connection
+mongoose.connect('mongodb+srv://your-mongodb-connection-string', {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+});
 
-// Middleware to parse JSON bodies
-app.use(express.json());
+const playerSchema = new mongoose.Schema({
+    userId: { type: String, required: true },
+    username: { type: String, required: true }
+});
 
-// Endpoint to receive player data and add it to the list
-app.post("/", (req, res) => {
+const Player = mongoose.model('Player', playerSchema);
+
+app.use(bodyParser.json());
+
+// Endpoint to add a player ID and username
+app.post('/addPlayer', async (req, res) => {
     const { userId, username } = req.body;
-    
-    // Check if the player already exists, if not, add them
-    const existingPlayer = players.find(player => player.userId === userId);
-    if (!existingPlayer) {
-        players.push({ userId, username });
-        console.log(`Player added: ${username}`);
+
+    try {
+        const newPlayer = new Player({ userId, username });
+        await newPlayer.save();
+        res.status(200).json({ message: 'Player added successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to add player', error });
     }
-
-    res.status(200).send("Player data received");
 });
 
-// Endpoint to show all player data (this will be at the root of the website)
-app.get("/", (req, res) => {
-    res.json(players); // Return the list of players
+// Endpoint to get all players
+app.get('/getPlayers', async (req, res) => {
+    try {
+        const players = await Player.find();
+        res.status(200).json(players);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to fetch players', error });
+    }
 });
 
-// Start the server
-app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+// Default route
+app.get('/', (req, res) => {
+    res.send('Roblox Tag System API');
+});
+
+// Start server
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
