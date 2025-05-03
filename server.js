@@ -1,18 +1,33 @@
 const express = require("express");
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
-// Simulated player data
-const players = [
-    { userId: 1, username: "PlayerOne" },
-    { userId: 2, username: "PlayerTwo" },
-];
+// Initialize an empty array to store players' data
+let players = [];
 
-// Endpoint to get player data
-app.get("/api/players", (req, res) => {
-    res.json(players);
+// Middleware to parse JSON bodies
+app.use(express.json());
+
+// Endpoint to receive player data and add it to the list
+app.post("/", (req, res) => {
+    const { userId, username } = req.body;
+    
+    // Check if the player already exists, if not, add them
+    const existingPlayer = players.find(player => player.userId === userId);
+    if (!existingPlayer) {
+        players.push({ userId, username });
+        console.log(`Player added: ${username}`);
+    }
+
+    res.status(200).send("Player data received");
 });
 
+// Endpoint to show all player data (this will be at the root of the website)
+app.get("/", (req, res) => {
+    res.json(players); // Return the list of players
+});
+
+// Start the server
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
 });
