@@ -1,21 +1,21 @@
-from fastapi import FastAPI, HTTPException
+# ================= FASTAPI SETUP =================
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from datetime import datetime, timedelta
-import random
+import asyncio
 
 app = FastAPI()
 
-# Store verification codes: discord_user_id -> {code, expires}
-verification_codes = {}
+verification_codes = {}  # discord_user_id -> {code, expires}
 
 class VerifyRequest(BaseModel):
     username: str
     code: int
 
 @app.post("/verify")
-def verify(req: VerifyRequest):
+def verify(req: VerifyRequest, background_tasks: BackgroundTasks):
     user_id = None
-    # Find code
+    # Find the code
     for uid, entry in verification_codes.items():
         if entry["code"] == req.code:
             if datetime.utcnow() > entry["expires"]:
@@ -29,8 +29,9 @@ def verify(req: VerifyRequest):
     # Delete used code
     del verification_codes[user_id]
 
-    return {"discord_id": user_id, "username": req.username, "verified": True}
+    # Schedule role assignment in bot's loop
+    if bot.is_ready():  # make sure bot is running
+        loop = asyncio.get_event_loop()
+        loop.create_task(assign_verified_role(user_id))
 
-@app.get("/")
-def root():
-    return {"status": "FastAPI running!"}
+    return {"discord_id": user_id, "username": req.username, "verified": True}
