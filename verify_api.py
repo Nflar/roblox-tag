@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 app = FastAPI()
 
-# Enable CORS for Roblox
+# Allow Roblox and Discord bot
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,12 +16,11 @@ app.add_middleware(
 
 verification_codes = {}  # discord_id -> {code, expires}
 
-# Root route (test)
 @app.get("/")
 def root():
     return {"status": "OK", "message": "Verification API running!"}
 
-# Register a new code (called by bot)
+# Called by Discord bot when user gets a code
 class RegisterRequest(BaseModel):
     discord_id: str
     code: int
@@ -33,27 +32,25 @@ def register(req: RegisterRequest):
         "code": req.code,
         "expires": datetime.utcnow() + timedelta(seconds=req.expires)
     }
-    return {"success": True, "message": "Code registered."}
+    print(f"[REGISTER] Code {req.code} for {req.discord_id}")
+    return {"success": True}
 
-# Roblox verify route
+# Called by Roblox when player submits code
 class VerifyRequest(BaseModel):
     username: str
+    userId: int
     code: int
 
 @app.post("/verify")
 def verify(req: VerifyRequest):
-    user_id = None
-
-    for uid, entry in verification_codes.items():
+    for discord_id, entry in list(verification_codes.items()):
         if entry["code"] == req.code:
             if datetime.utcnow() > entry["expires"]:
-                del verification_codes[uid]
+                del verification_codes[discord_id]
                 raise HTTPException(status_code=400, detail="Code expired")
-            user_id = uid
-            break
 
-    if not user_id:
-        raise HTTPException(status_code=404, detail="Invalid code")
+            del verification_codes[discord_id]
+            print(f"[VERIFY] {req.username} verified as {discord_id}")
+            return {"verified": True, "discord_id": discord_id}
 
-    del verification_codes[user_id]
-    return {"discord_id": user_id, "username": req.username, "verified": True}
+    raise HTTPException(status_code=404, detail="Invalid code")
