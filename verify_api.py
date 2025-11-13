@@ -5,52 +5,54 @@ from datetime import datetime, timedelta
 
 app = FastAPI()
 
-# Allow Roblox and Discord bot
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-verification_codes = {}  # discord_id -> {code, expires}
+# Store codes: roblox_userid -> {username, code, expires}
+roblox_codes = {}
+# Store linked users: discord_id -> roblox_name
+linked_users = {}
 
 @app.get("/")
 def root():
-    return {"status": "OK", "message": "Verification API running!"}
+    return {"status": "OK", "message": "Verification API active"}
 
-# Called by Discord bot when user gets a code
-class RegisterRequest(BaseModel):
-    discord_id: str
+# From Roblox server
+class RobloxRegister(BaseModel):
+    userId: int
+    username: str
     code: int
-    expires: int
 
 @app.post("/register")
-def register(req: RegisterRequest):
-    verification_codes[req.discord_id] = {
+def register(req: RobloxRegister):
+    roblox_codes[req.userId] = {
+        "username": req.username,
         "code": req.code,
-        "expires": datetime.utcnow() + timedelta(seconds=req.expires)
+        "expires": datetime.utcnow() + timedelta(minutes=10)
     }
-    print(f"[REGISTER] Code {req.code} for {req.discord_id}")
+    print(f"[REGISTER] {req.username} ({req.userId}) -> {req.code}")
     return {"success": True}
 
-# Called by Roblox when player submits code
-class VerifyRequest(BaseModel):
-    username: str
-    userId: int
+# From Discord bot
+class DiscordVerify(BaseModel):
+    discord_id: str
     code: int
 
 @app.post("/verify")
-def verify(req: VerifyRequest):
-    for discord_id, entry in list(verification_codes.items()):
-        if entry["code"] == req.code:
-            if datetime.utcnow() > entry["expires"]:
-                del verification_codes[discord_id]
+def verify(req: DiscordVerify):
+    for uid, data in list(roblox_codes.items()):
+        if data["code"] == req.code:
+            if datetime.utcnow() > data["expires"]:
+                del roblox_codes[uid]
                 raise HTTPException(status_code=400, detail="Code expired")
 
-            del verification_codes[discord_id]
-            print(f"[VERIFY] {req.username} verified as {discord_id}")
-            return {"verified": True, "discord_id": discord_id}
+            del roblox_codes[uid]
+            linked_users[req.discord_id] = data["username"]
+            print(f"[LINKED] Discord {req.discord_id} ↔ Roblox {data['username']}")
+            return {"verified": True, "roblox_name": data["username"]}
 
     raise HTTPException(status_code=404, detail="Invalid code")
